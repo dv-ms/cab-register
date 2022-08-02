@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
+import { ObjectId } from 'mongodb';
+
 import MongoDB from '../db';
 
 import { Route, ServiceErrorResponse } from '../types/routing';
 import { Driver, GetDriverDetailsServiceResponse, GetDriversServiceResponse } from '../types/drivers';
-import { log } from 'console';
-import { EMPTY_STRING } from '../constants';
 
 export const driverRoutes: Route[] = [
   {
@@ -12,9 +12,9 @@ export const driverRoutes: Route[] = [
     path: '/drivers',
     callbackFunction: async (request: Request, response: Response) => {
       try {
-        const MongoDBObject = new MongoDB();
+        const mongoDBObject = new MongoDB();
 
-        if ((await MongoDBObject.db.collection('drivers').countDocuments()) === 0) {
+        if ((await mongoDBObject.db.collection('drivers').countDocuments()) === 0) {
           const responseJson: ServiceErrorResponse = {
             message: 'No records found',
             description: 'No documents were found in the database.'
@@ -24,7 +24,7 @@ export const driverRoutes: Route[] = [
         }
 
         const drivers: Driver[] = [];
-        const cursor = MongoDBObject.db.collection('drivers').find();
+        const cursor = mongoDBObject.db.collection('drivers').find();
         await cursor.forEach(function (document) {
           drivers.push({
             _id: document._id.toString(),
@@ -33,7 +33,7 @@ export const driverRoutes: Route[] = [
           });
         });
 
-        MongoDBObject.close();
+        mongoDBObject.close();
 
         const responseJson: GetDriversServiceResponse = {
           drivers
@@ -51,17 +51,32 @@ export const driverRoutes: Route[] = [
   {
     method: 'GET',
     path: '/drivers/:id',
-    callbackFunction: (request: Request, response: Response) => {
+    callbackFunction: async (request: Request, response: Response) => {
       try {
-        const driver: Driver = {
-          _id: request.params.id,
-          name: `Drivers ${request.params.id}`,
-          phoneNumber: '1234567890'
-        };
-        const responseJson: GetDriverDetailsServiceResponse = {
-          driver
-        };
-        response.status(200).json(responseJson);
+        const mongoDBObject = new MongoDB();
+
+        const result = await mongoDBObject.db.collection('drivers').findOne({ _id: new ObjectId(request.params.id) });
+
+        mongoDBObject.close();
+
+        if (result === null) {
+          const responseJson: ServiceErrorResponse = {
+            message: 'No record found',
+            description: 'No document was found in the database with given id'
+          };
+          response.status(404).json(responseJson);
+          return;
+        } else {
+          const driver: Driver = {
+            _id: result._id.toString(),
+            name: result.name,
+            phoneNumber: result.phoneNumber
+          };
+          const responseJson: GetDriverDetailsServiceResponse = {
+            driver
+          };
+          response.status(200).json(responseJson);
+        }
       } catch (error) {
         const responseJson: ServiceErrorResponse = {
           message: error.message,
